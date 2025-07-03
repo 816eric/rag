@@ -17,7 +17,7 @@ import shutil
 import sys
 import time
 
-class RAGApp(DocumentManager):
+class RAGApp(DocumentManager):    
     def __init__(self, db_dir=config.DB_DIR, embedding_model_path=None, llm_model="deepseek-r1:1.5b"):
         super().__init__()
         self.db_dir = db_dir
@@ -34,36 +34,77 @@ class RAGApp(DocumentManager):
             retriever=self.vectorstore.as_retriever() if self.vectorstore else None
         ) if self.vectorstore else None
 
-    def embed_documents(self, file_paths):
-        files_list = self.add_documents(file_paths)
-        all_docs = []
-        for file_path in files_list:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == ".txt":
-                loader = TextLoader(file_path, encoding='utf8')
-            elif ext == ".pdf":
-                loader = PyPDFLoader(file_path)
-            elif ext == ".docx" and Docx2txtLoader:
-                loader = Docx2txtLoader(file_path)
-            elif ext in [".docx", ".xlsx"]:
-                loader = UnstructuredFileLoader(file_path)
-            else:
-                print(f"Unsupported file type: {file_path}")
-                continue
-            documents = loader.load()
-            all_docs.extend(documents)
-
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-        chunks = splitter.split_documents(all_docs)
-
+    def split_documents(self, documents, use_splitter=True, chunk_size=1000, chunk_overlap=100):
+        """
+        Split documents into chunks or return as-is.
+        Args:
+            documents (list): List of Document objects.
+            use_splitter (bool): Whether to use the splitter.
+            chunk_size (int): Chunk size for the splitter.
+            chunk_overlap (int): Overlap for the splitter.
+        Returns:
+            list: List of Document chunks.
+        """
+        if not use_splitter:
+            return documents
+        splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        return splitter.split_documents(documents)
+    
+    def batch_add_documents(self, chunks, batch_size=5000):
         if self.vectorstore:
-            self.vectorstore.add_documents(chunks)
+            for i in range(0, len(chunks), batch_size):
+                batch = chunks[i:i+batch_size]
+                self.vectorstore.add_documents(batch)
         else:
             self.vectorstore = Chroma.from_documents(
                 documents=chunks,
                 embedding=self.embedding_model,
                 persist_directory=self.db_dir
             )
+
+    def embed_documents(self, file_paths):
+        files_list = self.add_documents(file_paths)
+        all_docs = []
+        excel_detected = False
+        for file_path in files_list:
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == ".txt":
+                loader = TextLoader(file_path, encoding='utf8')
+                documents = loader.load()
+                all_docs.extend(documents)
+            elif ext == ".pdf":
+                loader = PyPDFLoader(file_path)
+                documents = loader.load()
+                all_docs.extend(documents)
+            elif ext == ".docx" and Docx2txtLoader:
+                loader = Docx2txtLoader(file_path)
+                documents = loader.load()
+                all_docs.extend(documents)
+            elif ext == ".docx":
+                loader = UnstructuredFileLoader(file_path)
+                documents = loader.load()
+                all_docs.extend(documents)
+            elif ext == ".xlsx":
+                # Special handling for Excel: each row is a Document
+                import pandas as pd
+                from langchain_core.documents import Document
+                df = pd.read_excel(file_path)
+                for idx, row in df.iterrows():
+                    content = " | ".join(str(cell) for cell in row.values)
+                    doc = Document(page_content=content, metadata={"row": int(idx), "source": file_path})
+                    all_docs.append(doc)
+                excel_detected = True
+            else:
+                print(f"Unsupported file type: {file_path}")
+                continue
+
+        # Use splitter for non-Excel, skip for Excel
+        if excel_detected:
+            chunks = self.split_documents(all_docs, use_splitter=False)
+        else:
+            chunks = self.split_documents(all_docs, use_splitter=True, chunk_size=1000, chunk_overlap=100)
+
+        self.batch_add_documents(chunks, batch_size=5000)
         self.update_qa_chain()
         print(f"Embedded {len(chunks)} chunks from {len(file_paths)} files.")
         return f"{len(chunks)} chunks embedded successfully."
