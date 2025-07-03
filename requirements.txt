@@ -8,3 +8,7 @@ sentence-transformers
 pypdf
 python-docx
 gradio
+python-docx 
+pandas 
+openpyxl 
+unstructured

@@ -13,8 +13,12 @@ rag_app = RAGApp(db_dir=config.DB_DIR,
         llm_model=config.llm_model)
 
 def answer_question(question, use_knowledge=True):
+    import time
+    start = time.time()
     result = rag_app.answer_question(question, use_knowledge)
-    return result
+    elapsed = time.time() - start
+    print(f"LLM response time: {elapsed:.2f} seconds")
+    return result, f"{elapsed:.2f} seconds"
 
 def embed_documents(files):
     print(f"Embedding files: {files}")
@@ -58,6 +62,10 @@ def restart_app():
     # Use execve for Windows, pass the current environment
     os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
 
+def change_llm(model_name):
+    rag_app.set_llm_model(model_name)
+    return f"LLM model changed to: {model_name}"
+
 with gr.Blocks() as demo:
     gr.Markdown("## 💬 Local RAG Assistant")
     with gr.Row():
@@ -65,13 +73,14 @@ with gr.Blocks() as demo:
         refer_checkbox = gr.Checkbox(label="Refer to documents", value=True)
         ask_button = gr.Button("Ask")
     answer_box = gr.Textbox(label="Answer", interactive=False)
+    time_box = gr.Textbox(label="LLM Response Time", interactive=False)
 
-    ask_button.click(answer_question, inputs=[question_box, refer_checkbox], outputs=answer_box)
-    question_box.submit(answer_question, inputs=[question_box, refer_checkbox], outputs=answer_box)
+    ask_button.click(answer_question, inputs=[question_box, refer_checkbox], outputs=[answer_box, time_box])
+    question_box.submit(answer_question, inputs=[question_box, refer_checkbox], outputs=[answer_box, time_box])
 
     gr.Markdown("---")
     with gr.Row():
-        file_upload = gr.File(label="Upload Text Files", file_types=[".txt"], file_count="multiple")
+        file_upload = gr.File(label="Upload Files", file_types=[".txt", ".pdf", ".docx", ".xlsx"], file_count="multiple")
         upload_button = gr.Button("Embed Documents")
     # Set initial choices to current docs
     doc_list = gr.CheckboxGroup(
@@ -85,5 +94,16 @@ with gr.Blocks() as demo:
     upload_button.click(embed_documents, inputs=file_upload, outputs=doc_list)
     delete_button.click(delete_documents, inputs=doc_list, outputs=doc_list)
     restart_button.click(lambda: restart_app(), inputs=[], outputs=[])
+
+    gr.Markdown("---")
+    with gr.Row():
+        model_dropdown = gr.Dropdown(
+            choices=config.MODEL_OPTIONS,
+            value=rag_app.get_llm_model() if rag_app.get_llm_model() in config.MODEL_OPTIONS else config.MODEL_OPTIONS[0],
+            label="Select LLM Model"
+        )
+        model_status = gr.Textbox(label="Model Status", interactive=False)
+
+    model_dropdown.change(change_llm, inputs=model_dropdown, outputs=model_status)
 
 demo.launch()

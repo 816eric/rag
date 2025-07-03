@@ -1,7 +1,11 @@
 from langchain_ollama import OllamaLLM
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader, UnstructuredFileLoader
+try:
+    from langchain_community.document_loaders import Docx2txtLoader
+except ImportError:
+    Docx2txtLoader = None
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chains import RetrievalQA
 from doc import DocumentManager
@@ -34,9 +38,20 @@ class RAGApp(DocumentManager):
         files_list = self.add_documents(file_paths)
         all_docs = []
         for file_path in files_list:
-            loader = TextLoader(file_path, encoding='utf8')
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == ".txt":
+                loader = TextLoader(file_path, encoding='utf8')
+            elif ext == ".pdf":
+                loader = PyPDFLoader(file_path)
+            elif ext == ".docx" and Docx2txtLoader:
+                loader = Docx2txtLoader(file_path)
+            elif ext in [".docx", ".xlsx"]:
+                loader = UnstructuredFileLoader(file_path)
+            else:
+                print(f"Unsupported file type: {file_path}")
+                continue
             documents = loader.load()
-            all_docs.extend(documents)            
+            all_docs.extend(documents)
 
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = splitter.split_documents(all_docs)
@@ -49,9 +64,9 @@ class RAGApp(DocumentManager):
                 embedding=self.embedding_model,
                 persist_directory=self.db_dir
             )
-        self.update_qa_chain()        
+        self.update_qa_chain()
         print(f"Embedded {len(chunks)} chunks from {len(file_paths)} files.")
-        return f"{len(documents)} documents embedded successfully."
+        return f"{len(chunks)} chunks embedded successfully."
     
     def update_qa_chain(self):
         if self.vectorstore:
@@ -93,3 +108,17 @@ class RAGApp(DocumentManager):
                 return False
         self.delete_documents_manifest(files)
         print("Chroma DB deleted and resources released.")
+    
+    def set_llm_model(self, model_name):
+        self.llm = OllamaLLM(model=model_name)
+        self.update_qa_chain()
+        print(f"LLM model changed to: {model_name}")
+
+    def get_llm_model(self):
+        """
+        Returns the current LLM model name.
+        
+        Returns:
+            str: The name of the currently set LLM model.
+        """
+        return self.llm.model if self.llm else "No LLM model set"
