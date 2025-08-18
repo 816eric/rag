@@ -2,9 +2,9 @@ langchain==0.3.26
 langchain-community>=0.0.19
 langchain_ollama
 langchain_huggingface
-langchain_chroma==0.2.5
-chromadb==1.0.19
-numpy==2.3.2
+langchain_chroma
+chromadb
+numpy
 sentence-transformers
 pypdf
 python-docx
