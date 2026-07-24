@@ -1,0 +1,9 @@
+env/
+__pycache__/
+*.pyc
+
+# Runtime data - personal documents, vector DB, chat history
+chroma_db/
+chat_sessions/
+docs/
+data/
