@@ -9,7 +9,10 @@ sentence-transformers
 pypdf
 python-docx
 gradio
-python-docx 
-pandas 
-openpyxl 
+python-docx
+pandas
+openpyxl
 unstructured
+fastapi
+uvicorn
+python-multipart
