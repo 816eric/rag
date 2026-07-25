@@ -12,41 +12,75 @@ rag_app = RAGApp(db_dir=config.DB_DIR,
 session_manager = ChatSessionManager()
 
 CSS = """
+/* Semantic tokens (light = default). Palette verified against WCAG 2.2 AA
+   (4.5:1 body text, 3:1 large text/UI) rather than eyeballed - see
+   craft/color.md in nexu-io/open-design for the source rules. Same values
+   as the Flutter frontend's theme.dart for cross-UI consistency. Accent is
+   teal, not the indigo #6366f1 that reads as a generic AI-tool default. */
 :root {
-    --gpt-bg-main: #212121;
-    --gpt-bg-sidebar: #171717;
-    --gpt-bg-raised: #2f2f2f;
-    --gpt-border: rgba(255, 255, 255, 0.12);
-    --gpt-text: #ececec;
-    --gpt-text-dim: #b4b4b4;
-    --gpt-hover: rgba(255, 255, 255, 0.08);
-    --gpt-selected: rgba(255, 255, 255, 0.14);
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --surface-raised: #f4f4f5;
+    --fg: #111111;
+    --muted: #5c5c5c;
+    --border: rgba(0, 0, 0, 0.08);
+    --hover: rgba(0, 0, 0, 0.06);
+    --selected: rgba(15, 118, 110, 0.12);
+    --accent: #0f766e;
+    --accent-fg: #ffffff;
+    --danger: #dc2626;
+    --danger-fg: #ffffff;
+}
+body.dark {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface-raised: #242424;
+    --fg: #f0f0f0;
+    --muted: #a3a3a3;
+    --border: rgba(255, 255, 255, 0.08);
+    --hover: rgba(255, 255, 255, 0.08);
+    --selected: rgba(45, 212, 191, 0.16);
+    --accent: #2dd4bf;
+    --accent-fg: #0f0f0f;
+    --danger: #f87171;
+    --danger-fg: #0f0f0f;
 }
 body, .gradio-container {
-    background: var(--gpt-bg-main) !important;
-    color: var(--gpt-text) !important;
+    background: var(--bg) !important;
+    color: var(--fg) !important;
 }
 .gradio-container * {
-    border-color: var(--gpt-border) !important;
+    border-color: var(--border) !important;
 }
 
 /* Sidebar */
 .sidebar {
-    background: var(--gpt-bg-sidebar) !important;
+    background: var(--surface) !important;
 }
 .sidebar, .sidebar * {
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
 }
 #new-chat-btn {
     background: transparent !important;
-    border: 1px solid var(--gpt-border) !important;
-    color: var(--gpt-text) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--fg) !important;
     border-radius: 12px !important;
     margin-bottom: 12px;
     box-shadow: none !important;
 }
 #new-chat-btn:hover {
-    background: var(--gpt-hover) !important;
+    background: var(--hover) !important;
+}
+#theme-toggle-btn {
+    background: transparent !important;
+    border: 1px solid var(--border) !important;
+    color: var(--fg) !important;
+    border-radius: 999px !important;
+    box-shadow: none !important;
+    min-width: 40px !important;
+}
+#theme-toggle-btn:hover {
+    background: var(--hover) !important;
 }
 #chat-sidebar .wrap {
     flex-direction: column !important;
@@ -62,13 +96,13 @@ body, .gradio-container {
     border: 1px solid transparent !important;
 }
 #chat-sidebar label:hover {
-    background: var(--gpt-hover) !important;
+    background: var(--hover) !important;
 }
 #chat-sidebar label.selected,
 #chat-sidebar label.selected span {
-    background: var(--gpt-selected) !important;
+    background: var(--selected) !important;
     border: 1px solid transparent !important;
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
     font-weight: 500;
 }
 #chat-sidebar input[type="radio"] {
@@ -77,13 +111,13 @@ body, .gradio-container {
 #settings-btn {
     margin-top: auto;
     background: transparent !important;
-    border: 1px solid var(--gpt-border) !important;
-    color: var(--gpt-text) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--fg) !important;
     border-radius: 12px !important;
     box-shadow: none !important;
 }
 #settings-btn:hover {
-    background: var(--gpt-hover) !important;
+    background: var(--hover) !important;
 }
 
 /* Header */
@@ -93,16 +127,16 @@ body, .gradio-container {
     background: transparent !important;
 }
 #header-row h2 {
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
 }
 #model-dropdown {
     min-width: 200px;
 }
 #model-dropdown .wrap, #model-dropdown input {
-    background: var(--gpt-bg-raised) !important;
-    border: 1px solid var(--gpt-border) !important;
+    background: var(--surface-raised) !important;
+    border: 1px solid var(--border) !important;
     border-radius: 999px !important;
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
 }
 
 /* Chat column */
@@ -130,7 +164,7 @@ body, .gradio-container {
     max-width: none !important;
 }
 #chatbot .user-row .message.panel-full-width {
-    background: var(--gpt-bg-raised) !important;
+    background: var(--surface-raised) !important;
     border-radius: 20px !important;
     border: none !important;
     padding: 10px 16px !important;
@@ -144,13 +178,13 @@ body, .gradio-container {
     max-width: 100%;
 }
 #chatbot .message-content, #chatbot .prose {
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
 }
 
 /* Input row */
 #input-row {
-    background: var(--gpt-bg-raised) !important;
-    border: 1px solid var(--gpt-border) !important;
+    background: var(--surface-raised) !important;
+    border: 1px solid var(--border) !important;
     border-radius: 28px !important;
     padding: 6px 8px !important;
     align-items: center;
@@ -158,13 +192,13 @@ body, .gradio-container {
 #input-row textarea, #input-row input {
     background: transparent !important;
     border: none !important;
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
     box-shadow: none !important;
 }
 #ask-btn {
     border-radius: 999px !important;
-    background: var(--gpt-text) !important;
-    color: #212121 !important;
+    background: var(--accent) !important;
+    color: var(--accent-fg) !important;
     border: none !important;
     min-width: 44px !important;
 }
@@ -172,10 +206,10 @@ body, .gradio-container {
     opacity: 0.85;
 }
 #refer-checkbox {
-    color: var(--gpt-text-dim) !important;
+    color: var(--muted) !important;
 }
 #time-caption {
-    color: var(--gpt-text-dim) !important;
+    color: var(--muted) !important;
     font-size: 12px;
     text-align: center;
     background: transparent !important;
@@ -185,7 +219,7 @@ body, .gradio-container {
 #time-caption textarea {
     background: transparent !important;
     border: none !important;
-    color: var(--gpt-text-dim) !important;
+    color: var(--muted) !important;
     text-align: center;
     box-shadow: none !important;
 }
@@ -198,22 +232,41 @@ body, .gradio-container {
     width: 420px;
     max-height: 85vh;
     overflow-y: auto;
-    background: var(--gpt-bg-raised) !important;
-    border: 1px solid var(--gpt-border) !important;
+    background: var(--surface-raised) !important;
+    border: 1px solid var(--border) !important;
     border-radius: 14px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     padding: 16px;
     z-index: 1000;
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
 }
 #settings-panel, #settings-panel * {
-    color: var(--gpt-text) !important;
+    color: var(--fg) !important;
 }
 #settings-panel .form,
 #settings-panel .block {
     height: auto !important;
     min-height: fit-content !important;
     overflow: visible !important;
+}
+#upload-btn {
+    background: var(--accent) !important;
+    color: var(--accent-fg) !important;
+    border: none !important;
+}
+#embed-folder-btn {
+    background: var(--accent) !important;
+    color: var(--accent-fg) !important;
+    border: none !important;
+}
+#delete-btn, #restart-btn {
+    background: transparent !important;
+    border: 1px solid var(--danger) !important;
+    color: var(--danger) !important;
+}
+#delete-btn:hover, #restart-btn:hover {
+    background: var(--danger) !important;
+    color: var(--danger-fg) !important;
 }
 
 footer {
@@ -227,12 +280,24 @@ THEME = gr.themes.Base(
     radius_size="lg",
 )
 
-FORCE_DARK_JS = """
+# Gradio toggles a `dark` class on <body> (not <html>) to switch its own
+# built-in theme variables - confirmed by inspecting body.className with
+# ?__theme=dark vs ?__theme=light. Setting/reading that same class directly
+# means the toggle button can flip instantly with no page reload, and the
+# choice persists across visits via localStorage. Defaults to dark to match
+# this app's established look for anyone without a saved preference yet.
+INIT_THEME_JS = """
 function() {
-    if (!window.location.search.includes('__theme=dark')) {
-        const sep = window.location.search ? '&' : '?';
-        window.location.replace(window.location.pathname + window.location.search + sep + '__theme=dark');
-    }
+    const stored = localStorage.getItem('rag-theme');
+    const dark = stored ? stored === 'dark' : true;
+    document.body.classList.toggle('dark', dark);
+}
+"""
+
+TOGGLE_THEME_JS = """
+function() {
+    const isDark = document.body.classList.toggle('dark');
+    localStorage.setItem('rag-theme', isDark ? 'dark' : 'light');
 }
 """
 
@@ -361,7 +426,7 @@ def close_settings():
     return False, gr.update(visible=False)
 
 
-with gr.Blocks(theme=THEME, css=CSS, title="Local RAG Assistant", js=FORCE_DARK_JS) as demo:
+with gr.Blocks(theme=THEME, css=CSS, title="Local RAG Assistant", js=INIT_THEME_JS) as demo:
     with gr.Sidebar(label="Chats", position="left", elem_id="app-sidebar"):
         new_chat_btn = gr.Button("+ New Chat", elem_id="new-chat-btn", variant="primary")
         session_radio = gr.Radio(choices=[], label=None, show_label=False, elem_id="chat-sidebar")
@@ -369,6 +434,7 @@ with gr.Blocks(theme=THEME, css=CSS, title="Local RAG Assistant", js=FORCE_DARK_
 
     with gr.Row(elem_id="header-row"):
         gr.Markdown("## 💬 Local RAG Assistant")
+        theme_toggle_btn = gr.Button("🌓", elem_id="theme-toggle-btn", scale=0, min_width=40)
         model_dropdown = gr.Dropdown(
             choices=config.MODEL_OPTIONS,
             value=rag_app.get_llm_model() if rag_app.get_llm_model() in config.MODEL_OPTIONS else config.MODEL_OPTIONS[0],
@@ -376,6 +442,7 @@ with gr.Blocks(theme=THEME, css=CSS, title="Local RAG Assistant", js=FORCE_DARK_
             elem_id="model-dropdown",
             scale=0,
         )
+    theme_toggle_btn.click(None, inputs=[], outputs=[], js=TOGGLE_THEME_JS)
 
     with gr.Column(elem_id="chat-column"):
         chatbot = gr.Chatbot(type="messages", elem_id="chatbot", show_label=False)
@@ -407,20 +474,20 @@ with gr.Blocks(theme=THEME, css=CSS, title="Local RAG Assistant", js=FORCE_DARK_
 
         with gr.Row():
             file_upload = gr.File(label="Upload Files", file_types=[".txt", ".pdf", ".docx", ".xlsx", ".md", ".json"], file_count="multiple")
-        upload_button = gr.Button("Embed Uploaded Files")
+        upload_button = gr.Button("Embed Uploaded Files", elem_id="upload-btn")
 
         gr.Markdown("**Embed an entire folder**")
         with gr.Row():
             folder_path_box = gr.Textbox(label="Folder", placeholder="No folder selected", interactive=False, scale=3)
             browse_btn = gr.Button("Browse...", scale=1)
         subfolder_checkbox = gr.Checkbox(label="Include subfolders", value=False)
-        embed_folder_btn = gr.Button("Embed Folder")
+        embed_folder_btn = gr.Button("Embed Folder", elem_id="embed-folder-btn")
         folder_status = gr.Textbox(label="Status", interactive=False)
 
         doc_list = gr.CheckboxGroup(choices=_doc_choices(), label="Embedded Documents")
         with gr.Row():
-            delete_button = gr.Button("Delete Selected")
-            restart_button = gr.Button("Restart & Clean DB")
+            delete_button = gr.Button("Delete Selected", elem_id="delete-btn")
+            restart_button = gr.Button("Restart & Clean DB", elem_id="restart-btn")
 
         upload_button.click(embed_documents, inputs=file_upload, outputs=doc_list)
         browse_btn.click(browse_folder, inputs=[], outputs=folder_path_box)

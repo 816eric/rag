@@ -10,6 +10,8 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+
     if (message.isUser) {
       return Align(
         alignment: Alignment.centerRight,
@@ -18,12 +20,12 @@ class MessageBubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           constraints: const BoxConstraints(maxWidth: 560),
           decoration: BoxDecoration(
-            color: AppColors.bgRaised,
+            color: c.surfaceRaised,
             borderRadius: BorderRadius.circular(20),
           ),
           child: SelectableText(
             message.content,
-            style: const TextStyle(color: AppColors.text, fontSize: 15),
+            style: TextStyle(color: c.fg, fontSize: 15),
           ),
         ),
       );
@@ -36,7 +38,7 @@ class MessageBubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 760),
         child: SelectableText(
           message.content,
-          style: const TextStyle(color: AppColors.text, fontSize: 15, height: 1.4),
+          style: TextStyle(color: c.fg, fontSize: 15, height: 1.4),
         ),
       ),
     );

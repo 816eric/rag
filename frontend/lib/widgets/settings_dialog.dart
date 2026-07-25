@@ -92,8 +92,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Dialog(
-      backgroundColor: AppColors.bgRaised,
+      backgroundColor: c.surfaceRaised,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440, maxHeight: 640),
@@ -104,12 +105,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text('Documents',
-                        style: TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.bold)),
+                        style: TextStyle(color: c.fg, fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppColors.text),
+                    icon: Icon(Icons.close, color: c.fg),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -124,10 +125,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         onPressed: _busy ? null : _uploadFiles,
                         icon: const Icon(Icons.upload_file),
                         label: const Text('Upload Files'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: c.accent,
+                          foregroundColor: c.accentFg,
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      const Text('Embed an entire folder',
-                          style: TextStyle(color: AppColors.text, fontWeight: FontWeight.bold)),
+                      Text('Embed an entire folder',
+                          style: TextStyle(color: c.fg, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -135,41 +140,57 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               decoration: BoxDecoration(
-                                color: AppColors.bgMain,
+                                color: c.bg,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.border),
+                                border: Border.all(color: c.border),
                               ),
                               child: Text(
                                 _folderPath.isEmpty ? 'No folder selected' : _folderPath,
                                 style: TextStyle(
-                                    color: _folderPath.isEmpty ? AppColors.textDim : AppColors.text, fontSize: 13),
+                                    color: _folderPath.isEmpty ? c.muted : c.fg, fontSize: 13),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          OutlinedButton(onPressed: _busy ? null : _browseFolder, child: const Text('Browse...')),
+                          OutlinedButton(
+                            onPressed: _busy ? null : _browseFolder,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: c.fg,
+                              side: BorderSide(color: c.border),
+                            ),
+                            child: const Text('Browse...'),
+                          ),
                         ],
                       ),
                       CheckboxListTile(
                         value: _includeSubfolders,
                         onChanged: (v) => setState(() => _includeSubfolders = v ?? false),
-                        title: const Text('Include subfolders', style: TextStyle(color: AppColors.text)),
+                        title: Text('Include subfolders', style: TextStyle(color: c.fg)),
+                        activeColor: c.accent,
+                        checkColor: c.accentFg,
                         controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: EdgeInsets.zero,
                         dense: true,
                       ),
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(onPressed: _busy ? null : _embedFolder, child: const Text('Embed Folder')),
+                        child: ElevatedButton(
+                          onPressed: _busy ? null : _embedFolder,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: c.accent,
+                            foregroundColor: c.accentFg,
+                          ),
+                          child: const Text('Embed Folder'),
+                        ),
                       ),
                       if (_status.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Text(_status, style: const TextStyle(color: AppColors.textDim, fontSize: 12)),
+                        Text(_status, style: TextStyle(color: c.muted, fontSize: 12)),
                       ],
                       const SizedBox(height: 16),
-                      const Text('Embedded Documents',
-                          style: TextStyle(color: AppColors.text, fontWeight: FontWeight.bold)),
+                      Text('Embedded Documents',
+                          style: TextStyle(color: c.fg, fontWeight: FontWeight.bold)),
                       ..._documents.map((doc) => CheckboxListTile(
                             value: _selected.contains(doc),
                             onChanged: (v) => setState(() {
@@ -179,7 +200,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
                                 _selected.remove(doc);
                               }
                             }),
-                            title: Text(doc, style: const TextStyle(color: AppColors.text, fontSize: 13)),
+                            title: Text(doc, style: TextStyle(color: c.fg, fontSize: 13)),
+                            activeColor: c.accent,
+                            checkColor: c.accentFg,
                             controlAffinity: ListTileControlAffinity.leading,
                             contentPadding: EdgeInsets.zero,
                             dense: true,
@@ -190,6 +213,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: _busy || _selected.isEmpty ? null : _deleteSelected,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: c.danger,
+                                side: BorderSide(color: c.danger.withValues(alpha: 0.5)),
+                              ),
                               child: const Text('Delete Selected'),
                             ),
                           ),
@@ -197,6 +224,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: _busy ? null : _restart,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: c.danger,
+                                side: BorderSide(color: c.danger.withValues(alpha: 0.5)),
+                              ),
                               child: const Text('Restart & Clean DB'),
                             ),
                           ),

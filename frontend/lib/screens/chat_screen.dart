@@ -7,7 +7,10 @@ import '../widgets/message_bubble.dart';
 import '../widgets/settings_dialog.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final VoidCallback onToggleTheme;
+  final ThemeMode themeMode;
+
+  const ChatScreen({super.key, required this.onToggleTheme, required this.themeMode});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -82,7 +85,11 @@ class _ChatScreenState extends State<ChatScreen> {
       _asking = true;
       _messages = [..._messages, ChatMessage(role: 'user', content: question)];
     });
-    _scrollToBottom();
+    // Must wait a frame before scrolling: calling this synchronously right after
+    // setState scrolls using the list's PRE-rebuild maxScrollExtent, so the just-sent
+    // message never actually comes into view - the chat looks frozen for the entire
+    // LLM response time (10-30s) with no sign the question was even received.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     final result = await _api.ask(_currentSessionId!, question, _useKnowledge);
     final sessions = await _api.listSessions();
@@ -105,21 +112,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Scaffold(
-      backgroundColor: AppColors.bgMain,
+      backgroundColor: c.bg,
       body: Row(
         children: [
-          _buildSidebar(),
-          Expanded(child: _buildMain()),
+          _buildSidebar(c),
+          Expanded(child: _buildMain(c)),
         ],
       ),
     );
   }
 
-  Widget _buildSidebar() {
+  Widget _buildSidebar(AppColors c) {
     return Container(
       width: 260,
-      color: AppColors.bgSidebar,
+      color: c.surface,
       child: Column(
         children: [
           Padding(
@@ -128,10 +136,10 @@ class _ChatScreenState extends State<ChatScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _newChat,
-                icon: const Icon(Icons.add, color: AppColors.text),
-                label: const Text('New Chat', style: TextStyle(color: AppColors.text)),
+                icon: Icon(Icons.add, color: c.fg),
+                label: Text('New Chat', style: TextStyle(color: c.fg)),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide(color: c.border),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -148,7 +156,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 return Container(
                   margin: const EdgeInsets.symmetric(vertical: 2),
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.selected : Colors.transparent,
+                    color: selected ? c.accent.withValues(alpha: 0.16) : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: ListTile(
@@ -159,7 +167,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: AppColors.text,
+                        color: c.fg,
                         fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                         fontSize: 13,
                       ),
@@ -176,10 +184,10 @@ class _ChatScreenState extends State<ChatScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _openSettings,
-                icon: const Icon(Icons.settings, color: AppColors.text, size: 18),
-                label: const Text('Settings', style: TextStyle(color: AppColors.text)),
+                icon: Icon(Icons.settings, color: c.fg, size: 18),
+                label: Text('Settings', style: TextStyle(color: c.fg)),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide(color: c.border),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -191,10 +199,10 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMain() {
+  Widget _buildMain(AppColors c) {
     return Column(
       children: [
-        _buildHeader(),
+        _buildHeader(c),
         Expanded(
           child: Center(
             child: ConstrainedBox(
@@ -202,39 +210,72 @@ class _ChatScreenState extends State<ChatScreen> {
               child: ListView.builder(
                 controller: _scrollController,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) => MessageBubble(message: _messages[index]),
+                itemCount: _messages.length + (_asking ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == _messages.length) {
+                    return _buildThinkingIndicator(c);
+                  }
+                  return MessageBubble(message: _messages[index]);
+                },
               ),
             ),
           ),
         ),
-        _buildInputArea(),
+        _buildInputArea(c),
       ],
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildThinkingIndicator(AppColors c) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: c.muted),
+            ),
+            const SizedBox(width: 10),
+            Text('Thinking…', style: TextStyle(color: c.muted, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(AppColors c) {
+    final isDark = widget.themeMode == ThemeMode.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
         children: [
           const Text('💬 ', style: TextStyle(fontSize: 20)),
-          const Text('Local RAG Assistant',
-              style: TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text('Local RAG Assistant',
+              style: TextStyle(color: c.fg, fontSize: 20, fontWeight: FontWeight.bold)),
           const Spacer(),
+          IconButton(
+            tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
+            onPressed: widget.onToggleTheme,
+            icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: c.fg),
+          ),
+          const SizedBox(width: 8),
           if (_modelsInfo != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: AppColors.bgRaised,
+                color: c.surfaceRaised,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: c.border),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _selectedModel,
-                  dropdownColor: AppColors.bgRaised,
-                  style: const TextStyle(color: AppColors.text, fontSize: 13),
+                  dropdownColor: c.surfaceRaised,
+                  style: TextStyle(color: c.fg, fontSize: 13),
                   items: _modelsInfo!.options
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                       .toList(),
@@ -251,7 +292,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildInputArea() {
+  Widget _buildInputArea(AppColors c) {
     return Padding(
       padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
       child: Center(
@@ -262,21 +303,21 @@ class _ChatScreenState extends State<ChatScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppColors.bgRaised,
+                  color: c.surfaceRaised,
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: c.border),
                 ),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _questionController,
-                        style: const TextStyle(color: AppColors.text),
-                        decoration: const InputDecoration(
+                        style: TextStyle(color: c.fg),
+                        decoration: InputDecoration(
                           hintText: 'Message the assistant...',
-                          hintStyle: TextStyle(color: AppColors.textDim),
+                          hintStyle: TextStyle(color: c.muted),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                         onSubmitted: (_) => _asking ? null : _ask(),
                       ),
@@ -286,25 +327,25 @@ class _ChatScreenState extends State<ChatScreen> {
                         Checkbox(
                           value: _useKnowledge,
                           onChanged: (v) => setState(() => _useKnowledge = v ?? true),
-                          activeColor: AppColors.text,
-                          checkColor: AppColors.bgMain,
+                          activeColor: c.accent,
+                          checkColor: c.accentFg,
                         ),
-                        const Text('Docs', style: TextStyle(color: AppColors.textDim, fontSize: 13)),
+                        Text('Docs', style: TextStyle(color: c.muted, fontSize: 13)),
                       ],
                     ),
                     const SizedBox(width: 4),
                     IconButton(
                       onPressed: _asking ? null : _ask,
                       icon: _asking
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.text),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: c.accentFg),
                             )
                           : const Icon(Icons.arrow_upward),
                       style: IconButton.styleFrom(
-                        backgroundColor: AppColors.text,
-                        foregroundColor: AppColors.bgMain,
+                        backgroundColor: c.accent,
+                        foregroundColor: c.accentFg,
                         shape: const CircleBorder(),
                       ),
                     ),
@@ -314,7 +355,7 @@ class _ChatScreenState extends State<ChatScreen> {
               if (_elapsed.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text(_elapsed, style: const TextStyle(color: AppColors.textDim, fontSize: 12)),
+                  child: Text(_elapsed, style: TextStyle(color: c.muted, fontSize: 12)),
                 ),
             ],
           ),
