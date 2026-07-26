@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:html' as html;
+import 'dart:typed_data';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:record/record.dart';
 
 import '../api_client.dart';
+import '../audio/wav_encoder.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/message_bubble.dart';
-import '../widgets/settings_dialog.dart';
+import '../widgets/voice_mode_overlay.dart';
 
 class ChatScreen extends StatefulWidget {
   final VoidCallback onToggleTheme;
@@ -31,10 +38,30 @@ class _ChatScreenState extends State<ChatScreen> {
   ModelsInfo? _modelsInfo;
   String? _selectedModel;
 
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _ttsEnabled = true;
+
+  // Push-to-talk voice input: record, transcribe, drop the text into the
+  // input box - distinct from the hands-free "Talk" mode below, which asks
+  // and speaks the reply itself.
+  final AudioRecorder _inputRecorder = AudioRecorder();
+  StreamSubscription<Uint8List>? _inputPcmSub;
+  final BytesBuilder _inputPcmBuffer = BytesBuilder();
+  bool _recordingInput = false;
+  bool _transcribingInput = false;
+
   @override
   void initState() {
     super.initState();
     _init();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    _inputPcmSub?.cancel();
+    _inputRecorder.dispose();
+    super.dispose();
   }
 
   Future<void> _init() async {
@@ -101,13 +128,89 @@ class _ChatScreenState extends State<ChatScreen> {
       _asking = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    _playTts(result.answer);
   }
 
-  Future<void> _openSettings() async {
-    await showDialog(
-      context: context,
-      builder: (_) => SettingsDialog(api: _api),
-    );
+  void _openSettings() {
+    final url = '${Uri.base.origin}${Uri.base.path}#/settings';
+    html.window.open(url, '_blank');
+  }
+
+  Future<void> _openVoiceMode() async {
+    if (_currentSessionId == null) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => VoiceModeOverlay(
+        api: _api,
+        sessionId: _currentSessionId!,
+        useKnowledge: _useKnowledge,
+        onTurnComplete: (question, answer) {}, // messages are reloaded once the overlay closes
+      ),
+      fullscreenDialog: true,
+    ));
+    // Voice mode appends directly to session history via the backend rather than
+    // through this screen's own state, so pick up everything it did in one go.
+    if (_currentSessionId != null) {
+      await _loadMessages(_currentSessionId!);
+    }
+    final sessions = await _api.listSessions();
+    setState(() => _sessions = sessions);
+  }
+
+  Future<void> _toggleVoiceInput() async {
+    if (_transcribingInput) return;
+    if (_recordingInput) {
+      await _stopVoiceInput();
+    } else {
+      await _startVoiceInput();
+    }
+  }
+
+  Future<void> _startVoiceInput() async {
+    if (!await _inputRecorder.hasPermission()) return;
+    _inputPcmBuffer.clear();
+    final stream = await _inputRecorder.startStream(const RecordConfig(
+      encoder: AudioEncoder.pcm16bits,
+      sampleRate: 16000,
+      numChannels: 1,
+      autoGain: true,
+      noiseSuppress: true,
+    ));
+    _inputPcmSub = stream.listen(_inputPcmBuffer.add);
+    setState(() => _recordingInput = true);
+  }
+
+  Future<void> _stopVoiceInput() async {
+    await _inputPcmSub?.cancel();
+    _inputPcmSub = null;
+    await _inputRecorder.stop();
+    final pcmBytes = _inputPcmBuffer.toBytes();
+    _inputPcmBuffer.clear();
+
+    setState(() {
+      _recordingInput = false;
+      _transcribingInput = pcmBytes.isNotEmpty;
+    });
+    if (pcmBytes.isEmpty) return;
+
+    try {
+      final wav = pcm16ToWav(pcmBytes, sampleRate: 16000);
+      final text = (await _api.transcribeAudio(wav, 'input.wav')).trim();
+      if (text.isNotEmpty) {
+        final existing = _questionController.text;
+        final merged = existing.isEmpty ? text : '$existing $text';
+        _questionController.text = merged;
+        _questionController.selection = TextSelection.collapsed(offset: merged.length);
+      }
+    } finally {
+      if (mounted) setState(() => _transcribingInput = false);
+    }
+  }
+
+  Future<void> _playTts(String text) async {
+    if (!_ttsEnabled || text.trim().isEmpty) return;
+    final audioBytes = await _api.synthesizeSpeech(text);
+    if (audioBytes == null) return;
+    await _audioPlayer.play(BytesSource(audioBytes));
   }
 
   @override
@@ -258,6 +361,11 @@ class _ChatScreenState extends State<ChatScreen> {
               style: TextStyle(color: c.fg, fontSize: 20, fontWeight: FontWeight.bold)),
           const Spacer(),
           IconButton(
+            tooltip: _ttsEnabled ? 'Mute spoken replies' : 'Unmute spoken replies',
+            onPressed: () => setState(() => _ttsEnabled = !_ttsEnabled),
+            icon: Icon(_ttsEnabled ? Icons.volume_up_outlined : Icons.volume_off_outlined, color: c.fg),
+          ),
+          IconButton(
             tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
             onPressed: widget.onToggleTheme,
             icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: c.fg),
@@ -321,6 +429,27 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         onSubmitted: (_) => _asking ? null : _ask(),
                       ),
+                    ),
+                    IconButton(
+                      tooltip: _recordingInput
+                          ? 'Stop recording'
+                          : (_transcribingInput ? 'Transcribing…' : 'Voice input'),
+                      onPressed: _transcribingInput ? null : _toggleVoiceInput,
+                      icon: _transcribingInput
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: c.muted),
+                            )
+                          : Icon(
+                              _recordingInput ? Icons.fiber_manual_record : Icons.mic_none,
+                              color: _recordingInput ? c.danger : c.muted,
+                            ),
+                    ),
+                    IconButton(
+                      tooltip: 'Talk (hands-free voice mode)',
+                      onPressed: _openVoiceMode,
+                      icon: Icon(Icons.graphic_eq, color: c.muted),
                     ),
                     Row(
                       children: [

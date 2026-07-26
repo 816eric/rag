@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routes import chat, documents, models, system
+from backend.routes import chat, documents, models, system, voice
 
 app = FastAPI(title="Local RAG Assistant API")
 
@@ -18,6 +18,7 @@ app.include_router(chat.router)
 app.include_router(documents.router)
 app.include_router(models.router)
 app.include_router(system.router)
+app.include_router(voice.router)
 
 
 @app.get("/api/health")

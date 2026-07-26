@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 
@@ -91,5 +92,40 @@ class ApiClient {
   Future<String> restart() async {
     final res = await http.post(Uri.parse('$baseUrl/api/system/restart'));
     return jsonDecode(res.body)['status'];
+  }
+
+  Future<String> transcribeAudio(Uint8List audioBytes, String filename) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/voice/transcribe'));
+    request.files.add(http.MultipartFile.fromBytes('file', audioBytes, filename: filename));
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+    return jsonDecode(res.body)['text'];
+  }
+
+  /// Returns WAV audio bytes, or null if the backend had nothing to say (empty text).
+  Future<Uint8List?> synthesizeSpeech(String text) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/voice/synthesize'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'text': text}),
+    );
+    if (res.statusCode == 204 || res.bodyBytes.isEmpty) return null;
+    return res.bodyBytes;
+  }
+
+  /// Streams the answer as it's generated. Each event is the raw decoded JSON
+  /// from one SSE `data:` line: `{'delta': '...'}` while generating, then a
+  /// final `{'done': true, 'elapsed_seconds': ...}`.
+  Stream<Map<String, dynamic>> askStream(String sessionId, String question, bool useKnowledge) async* {
+    final request = http.Request('POST', Uri.parse('$baseUrl/api/sessions/$sessionId/ask_stream'))
+      ..headers['Content-Type'] = 'application/json'
+      ..body = jsonEncode({'question': question, 'use_knowledge': useKnowledge});
+
+    final streamedResponse = await http.Client().send(request);
+    final lines = streamedResponse.stream.transform(utf8.decoder).transform(const LineSplitter());
+    await for (final line in lines) {
+      if (!line.startsWith('data: ')) continue;
+      yield jsonDecode(line.substring(6)) as Map<String, dynamic>;
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'theme.dart';
 import 'screens/chat_screen.dart';
+import 'screens/settings_screen.dart';
 
 const String _themePrefKey = 'theme_mode';
 
@@ -51,7 +52,13 @@ class _RagAppState extends State<RagApp> {
       theme: buildLightTheme(),
       darkTheme: buildDarkTheme(),
       themeMode: _themeMode,
-      home: ChatScreen(onToggleTheme: _toggleTheme, themeMode: _themeMode),
+      // No `home:` - `routes` + the default initialRoute (read from the
+      // browser's current URL on web) is what lets /#/settings open as a
+      // real, independently-addressable route in its own tab.
+      routes: {
+        '/': (_) => ChatScreen(onToggleTheme: _toggleTheme, themeMode: _themeMode),
+        '/settings': (_) => const SettingsScreen(),
+      },
     );
   }
 }

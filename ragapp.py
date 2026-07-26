@@ -217,7 +217,25 @@ class RAGApp(DocumentManager):
         if isinstance(result, dict) and "result" in result:
             return result["result"]
         return result
-    
+
+    def answer_question_stream(self, question: str, use_knowledge: bool = True):
+        """Yields response text chunks as they're generated, for real-time display.
+
+        Mirrors answer_question's retrieval + prompt construction but calls the LLM's
+        own streaming API directly instead of going through the blocking RetrievalQA
+        chain, which returns the full answer in one shot only.
+        """
+        print(f"Question (stream): {question}, Use Knowledge: {use_knowledge}")
+        if use_knowledge and self.vectorstore:
+            docs = self.vectorstore.as_retriever().invoke(question)
+            context = "\n\n".join(d.page_content for d in docs)
+            prompt = QA_PROMPT.format(context=context, question=question)
+        else:
+            prompt = question
+
+        for chunk in self.llm.stream(prompt):
+            yield chunk
+
     def close_vectorstore(self):
         """Release the Chroma vectorstore so the DB files can be deleted."""
         self.vectorstore = None

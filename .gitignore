@@ -7,3 +7,6 @@ chroma_db/
 chat_sessions/
 docs/
 data/
+
+# Voice model weights (~120MB) - fetched once locally, not source
+backend/voice_models/
